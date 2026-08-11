@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinity Songbook Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/abcjs/6.2.2/abcjs-basic-min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Crimson+Pro:ital,wght@0,400;0,700;1,400&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+            color: #1e293b;
+        }
+
+        #home-ui {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        #loader {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.9); 
+            backdrop-filter: blur(8px);
+            z-index: 9999;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loader">
+        <div class="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent mb-6"></div>
+        <p class="font-bold text-3xl mb-2">Generating Songbook...</p>
+        <p id="loader-status" class="text-slate-400 text-center px-8 text-lg">Drawing vector notation...</p>
+    </div>
+
+    <div id="home-ui">
+        <header class="text-center mb-12">
+            <h1 class="text-5xl font-black text-slate-900 tracking-tight mb-2">Infinity Songbook</h1>
+            <p class="text-slate-500 font-medium text-xl">Music Library Viewer</p>
+        </header>
+
+        <div class="bg-white rounded-[2.5rem] p-10 border-2 border-dashed border-slate-300 hover:border-blue-500 transition-all text-center mb-10 shadow-sm">
+            <div class="w-20 h-20 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <h3 class="text-2xl font-bold text-slate-800 mb-2">Import Project Files</h3>
+            <div class="flex flex-wrap justify-center gap-4 pt-4">
+                <button onclick="triggerFileInput('files')" class="bg-slate-900 text-white px-10 py-4 rounded-2xl font-bold hover:bg-black transition-all active:scale-95 shadow-lg">Add Files</button>
+                <button onclick="triggerFileInput('folder')" class="bg-white border-2 border-slate-200 text-slate-700 px-10 py-4 rounded-2xl font-bold hover:bg-slate-50 transition-all active:scale-95">Add Folder</button>
+            </div>
+            <input type="file" id="fileInput" multiple accept=".json,.txt,.abc" class="hidden" onchange="handleFiles(this.files)">
+            <input type="file" id="folderInput" webkitdirectory directory class="hidden" onchange="handleFiles(this.files)">
+        </div>
+
+        <div id="library-section" class="hidden space-y-6">
+            <div class="flex items-center justify-between border-b-2 border-slate-200 pb-6">
+                <h2 class="text-2xl font-black text-slate-800">Library (<span id="song-count">0</span>)</h2>
+                <button onclick="generateInNewWindow()" class="bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold shadow-lg hover:bg-blue-700 transition-all active:scale-95">
+                    Print Songbook PDF
+                </button>
+            </div>
+            <div id="song-list" class="grid grid-cols-1 gap-3"></div>
+        </div>
+    </div>
+
+    <script>
+        let songLibrary = [];
+
+        function triggerFileInput(mode) {
+            if (mode === 'files') document.getElementById('fileInput').click();
+            else document.getElementById('folderInput').click();
+        }
+
+        async function handleFiles(files) {
+            for (let file of files) {
+                const text = await file.text();
+                const trimmed = text.trim();
+                
+                try {
+                    // CASE 1: Old JSON format
+                    if (trimmed.startsWith('{')) {
+                        const data = JSON.parse(text);
+                        if (data.title) {
+                            data._format = 'json'; // Mark for generator
+                            songLibrary.push(data);
+                        }
+                    } 
+                    // CASE 2: ABC format
+                    else if (trimmed.includes('X:') && trimmed.includes('K:')) {
+                        const titleMatch = text.match(/^T:(.*)$/m);
+                        const musicMatch = text.match(/^C:(.*)$/m);
+                        const vMatch = text.match(/^V:/mg);
+                        
+                        songLibrary.push({
+                            title: titleMatch ? titleMatch[1].trim() : file.name.replace('.abc', ''),
+                            musicBy: musicMatch ? musicMatch[1].trim() : 'Unknown',
+                            voices: vMatch ? vMatch.length : 1,
+                            abcRaw: text,
+                            _format: 'abc'
+                        });
+                    }
+                } catch (e) {
+                    console.error("Error loading file:", file.name, e);
+                }
+            }
+            updateLibraryUI();
+        }
+
+        function updateLibraryUI() {
+            const list = document.getElementById('song-list');
+            const section = document.getElementById('library-section');
+            list.innerHTML = '';
+            songLibrary.forEach((song, idx) => {
+                const item = document.createElement('div');
+                item.className = "bg-white p-5 rounded-2xl border border-slate-200 flex justify-between items-center";
+                item.innerHTML = `
+                    <div class="flex flex-col">
+                        <span class="font-bold text-slate-700">${song.title}</span>
+                        <span class="text-xs text-slate-400 italic">${song.musicBy || 'Unknown Composer'}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded font-bold uppercase">${song._format}</span>
+                        <span class="text-xs font-black bg-slate-100 px-3 py-1 rounded-full uppercase text-slate-500">${song.voices}-Voice</span>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+            document.getElementById('song-count').innerText = songLibrary.length;
+            section.classList.toggle('hidden', songLibrary.length === 0);
+        }
+
+        async function generateInNewWindow() {
+            const loader = document.getElementById('loader');
+            const status = document.getElementById('loader-status');
+            loader.style.display = 'flex';
+
+            const printWindow = window.open('', '_blank', 'width=1100,height=850');
+            
+            const styleBlock = `
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;800&family=Crimson+Pro:wght@800&display=swap');
+                    @page { size: A4; margin: 0; }
+                    body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background: #ddd; }
+                    #content { zoom: 0.87; -moz-transform: scale(0.87); -moz-transform-origin: top center; }
+                    .page { background: white; width: 210mm; min-height: 297mm; padding: 2cm; margin: 0 auto; box-sizing: border-box; position: relative; box-shadow: 0 0 10px rgba(0,0,0,0.1); page-break-after: always; }
+                    .song-title { font-family: 'Crimson Pro', serif; font-size: 36pt; text-align: center; border-bottom: 2pt solid black; margin-bottom: 20pt; padding-bottom: 5pt; }
+                    .credits { display: flex; justify-content: space-between; font-weight: 800; font-size: 10pt; margin-bottom: 25pt; text-transform: uppercase; }
+                    .footer-label { position: absolute; bottom: 1cm; right: 1.5cm; font-size: 11pt; color: #1e293b; font-weight: 800; letter-spacing: 1pt; }
+                    .index-item { display: flex; justify-content: space-between; border-bottom: 2px dotted #ccc; padding: 12pt 0; font-size: 20pt; font-weight: 800; }
+                    @media print { body { background: white; } #content { zoom: 0.87; } .page { margin: 0; box-shadow: none; width: 100%; } }
+                </style>
+            `;
+
+            printWindow.document.write(`<html><head><title>Infinity Songbook</title>${styleBlock}<\/head><body><div id="content"><\/div><\/body><\/html>`);
+            const container = printWindow.document.getElementById('content');
+
+            // Index Page
+            const idxPage = printWindow.document.createElement('div');
+            idxPage.className = 'page';
+            idxPage.innerHTML = `<h1 style="text-align:center; font-size: 55pt; margin-top: 80pt; margin-bottom: 40pt; font-weight: 900; letter-spacing: 6pt;">INDEX</h1><div>` + 
+                songLibrary.map((s, i) => `<div class="index-item"><span>${s.title}</span><span style="color: #64748b;">SONG ${i+1}</span></div>`).join('') + `</div>`;
+            container.appendChild(idxPage);
+
+            // Song Pages
+            for (let i = 0; i < songLibrary.length; i++) {
+                const song = songLibrary[i];
+                const songPage = printWindow.document.createElement('div');
+                songPage.className = 'page';
+                songPage.innerHTML = `
+                    <div class="song-title">${song.title}</div>
+                    <div class="credits">
+                        <span>Lyrics: ${song.lyricsBy || song.lyricWriter || '---'}</span>
+                        <span>Music: ${song.musicBy || song.musicWriter || '---'}</span>
+                    </div>
+                    <div id="abc-${i}"></div>
+                    <div class="footer-label">SONG ${i+1}</div>`;
+                container.appendChild(songPage);
+
+                let finalAbc = "";
+
+                if (song._format === 'abc') {
+                    // Use the raw ABC text directly
+                    finalAbc = song.abcRaw;
+                } else {
+                    // Generate ABC from the old JSON structure
+                    const time = song.timeSignature || "4/4";
+                    const partsCount = parseInt(song.voices) || 1;
+                    let scoreHeader = "";
+                    if (partsCount === 4) scoreHeader = '%%score (1 2) (3 4)';
+                    else if (partsCount === 3) scoreHeader = '%%score (1 2) 3';
+                    else if (partsCount === 2) scoreHeader = '%%score (1 2)';
+
+                    finalAbc = `X:1\nM:${time}\nL:1/4\nK:C\n${scoreHeader}\n`;
+                    song.music.forEach((section) => {
+                        const voices = Array.isArray(section) ? section : section.voices;
+                        const lyrics = Array.isArray(section) ? "" : (section.lyrics || "");
+                        for(let v=0; v<partsCount; v++) {
+                            finalAbc += `V:${v+1} clef=${v < 2 ? 'treble' : 'bass'}\n${voices[v] || 'z4'}\n`;
+                            if (v === 0 && lyrics) finalAbc += `w: ${lyrics}\n`;
+                        }
+                    });
+                }
+
+                ABCJS.renderAbc(printWindow.document.getElementById(`abc-${i}`), finalAbc, { responsive: "resize", scale: 1.1 });
+            }
+
+            status.innerText = "Finalizing pages...";
+            setTimeout(() => {
+                loader.style.display = 'none';
+                printWindow.print();
+            }, 1500);
+        }
+    </script>
+</body>
+</html>
