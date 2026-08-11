@@ -37,6 +37,24 @@
 </head>
 <body>
 
+    <nav class="bg-white border-b-2 border-slate-200 shadow-sm sticky top-0 z-50">
+        <div class="max-w-6xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="index.html" class="flex items-center gap-2">
+                        <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-black text-xs shadow-md">IHS</div>
+                        <span class="font-black text-xl tracking-tight text-slate-800">Infinity Harmony</span>
+                    </a>
+                </div>
+                <div class="flex items-center space-x-6 text-sm font-bold text-slate-500">
+                    <a href="generater.html" class="hover:text-blue-600 transition-colors">Editor</a>
+                    <a href="viewer.html" class="hover:text-blue-600 transition-colors">Songbook Viewer</a>
+                    <a href="to_abcjs_format.html" class="hover:text-blue-600 transition-colors">Format Converter</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
     <div id="loader">
         <div class="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent mb-6"></div>
         <p class="font-bold text-3xl mb-2">Generating Songbook...</p>
